@@ -6,13 +6,19 @@
 
 #define NAME_NET_WI_FI "my_wifi" // name wi-fi network
 #define PASSWD_WI_FI "my_passwd" //password wi-fi network
-#define IP_WI_FI "192.168.77.177" // ip adress server arduino
-#define GATEWAY_WI_FI "192.168.77.7" // geteway
+#define IP_WI_FI "192.168.1.111" // ip adress server arduino
+#define GATEWAY_WI_FI "192.168.1.1" // geteway
 #define MASK_WI_FI "255.255.255.0" //mask
 
 #define REMOTE_SERVER "dev.autumnapp.com"    //
 
 //----------------------------------------------------------------------
+//parameters for controlling functions
+#define PIN_LIGHT 9
+
+// This code is unique for each controller, you have to take the value of autumn
+#define ID_ACTUATOR "actYDFGj7srI"
+// ---------------------------------------------------------------------------
 
 //data send
 #define TIME_PERIOD_SEND_DATA 30000
@@ -44,18 +50,21 @@ float DHT22_temperature = 0;
 
 //-----------------------------------------------------------------------
 
-#define PIN_LIGHT 9
 
-//namber compare byte string
-volatile uint16_t compare_char_string_1 = 0;
-volatile uint16_t compare_char_string_2 = 0;
-
-// !!! this line should not contain spaces
- char json_string_on[]  = "{\"data\":{\"type\":\"ActuatorCommand\",\"id\":\"actyTO8Y9P8B\",\"attributes\":{\"actuator\":\"actyTO8Y9P8B\",\"command\":{\"value\":true}}}}";
- char json_string_off[] = "{\"data\":{\"type\":\"ActuatorCommand\",\"id\":\"actyTO8Y9P8B\",\"attributes\":{\"actuator\":\"actyTO8Y9P8B\",\"command\":{\"value\":false}}}}";
-
+ // !!! this line should not contain spaces
+//these terms should be changed, if changed json format
+ const  char json_string_on[]  = "\"command\":{\"value\":true";
+ const  char json_string_off[] = "\"command\":{\"value\":false";
+ const  char json_string_id_actuator[] = "\"actuator\":\"" ID_ACTUATOR "\"";
 //----------------------------------------------------------------------
 
+//global variables, NO change them
+//number compare byte string
+volatile uint16_t compare_char_string_on = 0;
+volatile uint16_t compare_char_string_off = 0;
+volatile uint16_t compare_char_id_actuator = 0;
+
+//---------------------------------------------------
  int8_t sendATcommand(const char* ATcommand, const char* expected_answer, unsigned int timeout);
 
  uint32_t last_time_loop =0;
@@ -67,9 +76,9 @@ void setup(){
           
     delay(500); //delay for inicializate wi-fi module
 
-    Serial.begin(115200); //debug serial port WI_FI MODULE
+    Serial.begin(115200); //serial port WI_FI MODULE
 
-    while (!Serial) {}
+   // while (!Serial) {}
 
     delay(3000); //delay for inicializate sensor DHT22
 
@@ -78,8 +87,8 @@ void setup(){
  sendATcommand("AT+CWQAP", "OK", 1000); 
  sendATcommand("AT+CIPCLOSE=1","CLOSED" ,1000);
 // sendATcommand("AT+CWLAP", "OK", 10000);
- sendATcommand("AT+CWJAP=\"" NAME_NET_WI_FI "\",\"" PASSWD_WI_FI "\"", "WIFI CONNECTED", 5000); // connet to wi-fi
- sendATcommand("AT+CIPSTA=\"" IP_WI_FI "\",\"" GATEWAY_WI_FI "\",\"" MASK_WI_FI "\"", "OK", 3000); //manual IP, gateway and mask
+sendATcommand("AT+CIPSTA=\"" IP_WI_FI "\",\"" GATEWAY_WI_FI "\",\"" MASK_WI_FI "\"", "OK", 3000); //manual IP, gateway and mask
+ sendATcommand("AT+CWJAP=\"" NAME_NET_WI_FI "\",\"" PASSWD_WI_FI "\"", "WIFI CONNECTED", 5000); // connet to wi-fi 
  sendATcommand("AT+CIPMUX=1", "OK", 1000);
  sendATcommand("AT+CIPSERVER=1,80", "OK", 1000);
  delay(2000); 
@@ -205,52 +214,66 @@ void listen_server(){
     
       char c = Serial.read();   
 
-      if(compare_string_1(c))  break;
-      if(compare_string_2(c))  break;        
+      if(json_compare(c))  break;          
     
   }  
 }
 
+
 //---------------------------------------------------
+//This function compares the bytes received parcels
+uint8_t json_compare(char data){
 
-uint8_t compare_string_1(char data){
+  if(data == ' '){return 0;}//Remove spaces
 
-  uint8_t k = 0;
-  if(!(data == ' ')){
-
-    if(json_string_on[compare_char_string_1] == data){
-       compare_char_string_1++;
-       if( compare_char_string_1 >= (sizeof(json_string_on)-1)){
-          answer_for_server("PIN_LIGHT_ON");
-          digitalWrite(PIN_LIGHT, HIGH);
-          k=1;
-          compare_char_string_1 = 0;
+    //compare string_on
+      if( compare_char_string_on < (sizeof(json_string_on)-1)){
+        if(json_string_on[compare_char_string_on] == data){
+          compare_char_string_on++;
         }
+        else {compare_char_string_on = 0;}
      }
-     else {compare_char_string_1 = 0;}
-  }
-     return k;
-}
-//--------------------------------------
-  uint8_t compare_string_2(char data){
+    //compare string_off
+      if( compare_char_string_off < (sizeof(json_string_off)-1)){
+        if(json_string_off[compare_char_string_off] == data){
+          compare_char_string_off++;
+        }
+        else {compare_char_string_off = 0;}
+     }
 
-  uint8_t k = 0;
-  if(!(data == ' ')){
+    //compare string_id_actuator
+     if( compare_char_id_actuator < (sizeof(json_string_id_actuator)-1)){
+        if(json_string_id_actuator[compare_char_id_actuator] == data){
+          compare_char_id_actuator++;
+        }
+        else {compare_char_id_actuator = 0;}
+     }
 
-    if(json_string_off[compare_char_string_2] == data){
-       compare_char_string_2++;
-       if( compare_char_string_2 >= (sizeof(json_string_off)-1)){
+
+ if( (compare_char_id_actuator >= (sizeof(json_string_id_actuator)-1)) && (compare_char_string_on >= (sizeof(json_string_on)-1)) ){
+           answer_for_server("PIN_LIGHT_ON");
+          digitalWrite(PIN_LIGHT, HIGH);
+          compare_char_string_on = 0;
+          compare_char_string_off = 0;
+          compare_char_id_actuator = 0;
+          return 1;
+     
+ }
+  if( (compare_char_id_actuator >= (sizeof(json_string_id_actuator)-1)) && (compare_char_string_off >= (sizeof(json_string_off)-1)) ){
           answer_for_server("PIN_LIGHT_OFF");
           digitalWrite(PIN_LIGHT, LOW);
-          k=1;
-          compare_char_string_2 = 0;
-        }
-     }
-     else {compare_char_string_2 = 0;}
-  }
-     return k;
-  }
-//-------------------------------------------------------------
+          compare_char_string_on = 0;
+          compare_char_string_off = 0;
+          compare_char_id_actuator = 0;
+          return 1;
+     
+ }
+
+return 0;
+     
+}
+
+//--------------------------------------------------------------
 
 void answer_for_server(const char* answer){
    
@@ -265,6 +288,6 @@ void answer_for_server(const char* answer){
     Serial.print(F("\r\n"));
     
     sendATcommand("","SEND OK", 3000);  
-    sendATcommand("AT+CIPCLOSE=1","OK" ,1000);
+    sendATcommand("AT+CIPCLOSE=0","OK" ,1000);
 
 }
