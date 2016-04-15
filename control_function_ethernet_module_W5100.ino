@@ -4,25 +4,31 @@
 
 #define PIN_LIGHT 9
 
-//namber compare byte string
-volatile uint16_t compare_char_string_1 = 0;
-volatile uint16_t compare_char_string_2 = 0;
+// This code is unique for each controller, you have to take the value of autumn
+#define ID_ACTUATOR "actYDFGj7srI"
 
-// !!! this line should not contain spaces
- char json_string_on[]  = "{\"data\":{\"type\":\"ActuatorCommand\",\"id\":\"actyTO8Y9P8B\",\"attributes\":{\"actuator\":\"actyTO8Y9P8B\",\"command\":{\"value\":true}}}}";
- char json_string_off[] = "{\"data\":{\"type\":\"ActuatorCommand\",\"id\":\"actyTO8Y9P8B\",\"attributes\":{\"actuator\":\"actyTO8Y9P8B\",\"command\":{\"value\":false}}}}";
+ // !!! this line should not contain spaces
+//these terms should be changed, if changed json format
+ const  char json_string_on[]  = "\"command\":{\"value\":true";
+ const  char json_string_off[] = "\"command\":{\"value\":false";
+ const  char json_string_id_actuator[] = "\"actuator\":\"" ID_ACTUATOR "\"";
 
- 
 //configure server arduino
-
 byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED}; //mac adress arduibo
 
-IPAddress ip(192, 168, 77, 178); //IPadress arduino
+IPAddress ip(192, 168, 1, 111); //IPadress arduino
 
 EthernetServer main_server(80);
 
 //---------------------------------------------------
 
+//global variables, NO change them
+//namber compare byte string
+volatile uint16_t compare_char_string_on = 0;
+volatile uint16_t compare_char_string_off = 0;
+volatile uint16_t compare_char_id_actuator = 0;
+
+//---------------------------------------------------
 void setup() {
  
   Serial.begin(115200);
@@ -46,47 +52,60 @@ void loop() {
 
 }
 
-
 //---------------------------------------------------
+//This function compares the bytes received parcels
+uint8_t json_compare(char data){
 
-uint8_t compare_string_1(char data){
+  if(data == ' '){return 0;}//Remove spaces
 
-  uint8_t k = 0;
-  if(!(data == ' ')){
+    //compare string_on
+      if( compare_char_string_on < (sizeof(json_string_on)-1)){
+        if(json_string_on[compare_char_string_on] == data){
+          compare_char_string_on++;
+        }
+        else {compare_char_string_on = 0;}
+     }
+    //compare string_off
+      if( compare_char_string_off < (sizeof(json_string_off)-1)){
+        if(json_string_off[compare_char_string_off] == data){
+          compare_char_string_off++;
+        }
+        else {compare_char_string_off = 0;}
+     }
 
-    if(json_string_on[compare_char_string_1] == data){
-       compare_char_string_1++;
-       if( compare_char_string_1 >= (sizeof(json_string_on)-1)){
+    //compare string_id_actuator
+     if( compare_char_id_actuator < (sizeof(json_string_id_actuator)-1)){
+        if(json_string_id_actuator[compare_char_id_actuator] == data){
+          compare_char_id_actuator++;
+        }
+        else {compare_char_id_actuator = 0;}
+     }
+
+
+ if( (compare_char_id_actuator >= (sizeof(json_string_id_actuator)-1)) && (compare_char_string_on >= (sizeof(json_string_on)-1)) ){
           Serial.println("PIN_LIGHT_ON");
           digitalWrite(PIN_LIGHT, HIGH);
-          k=1;
-          compare_char_string_1 = 0;
-        }
-     }
-     else {compare_char_string_1 = 0;}
-  }
-     return k;
-}
-//--------------------------------------
-  uint8_t compare_string_2(char data){
-
-  uint8_t k = 0;
-	if(!(data == ' ')){
-
-    if(json_string_off[compare_char_string_2] == data){
-       compare_char_string_2++;
-       if( compare_char_string_2 >= (sizeof(json_string_off)-1)){
+          compare_char_string_on = 0;
+          compare_char_string_off = 0;
+          compare_char_id_actuator = 0;
+          return 1;
+     
+ }
+  if( (compare_char_id_actuator >= (sizeof(json_string_id_actuator)-1)) && (compare_char_string_off >= (sizeof(json_string_off)-1)) ){
           Serial.println("PIN_LIGHT_OFF");
           digitalWrite(PIN_LIGHT, LOW);
-          k=1;
-          compare_char_string_2 = 0;
-        }
-     }
-     else {compare_char_string_2 = 0;}
-	}
-     return k;
-  }
-//-------------------------------------------------------------
+          compare_char_string_on = 0;
+          compare_char_string_off = 0;
+          compare_char_id_actuator = 0;
+          return 1;
+     
+ }
+
+return 0;
+     
+}
+
+//--------------------------------------------------------------
 
 void listenServer(){
   // listen for incoming clients
@@ -98,15 +117,11 @@ void listenServer(){
         char c = serv_client.read();
         Serial.write(c);
         //serv_client.print(c); //echo to client
-        if(compare_string_1(c))  break;
-        if(compare_string_2(c))  break;        
+        if(json_compare(c))  break;             
       }
     }
 
     serv_client.println("Server: arduino");
-
-    compare_char_string_1 = 0;
-	  compare_char_string_2 = 0;
     
 	// give the web browser time to receive the data
     delay(1);
